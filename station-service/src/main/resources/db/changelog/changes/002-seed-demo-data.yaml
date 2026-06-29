@@ -1,0 +1,78 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-seed-stations
+      author: madina
+      changes:
+        - insert:
+            tableName: stations
+            columns:
+              - column: { name: id, value: "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa" }
+              - column: { name: name, value: "Tashkent Mall" }
+              - column: { name: lat, valueNumeric: 41.2995 }
+              - column: { name: lng, valueNumeric: 69.2401 }
+              - column: { name: status, value: "ONLINE" }
+              - column: { name: total_slots, valueNumeric: 6 }
+        - insert:
+            tableName: stations
+            columns:
+              - column: { name: id, value: "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa" }
+              - column: { name: name, value: "Chorsu Metro" }
+              - column: { name: lat, valueNumeric: 41.3043 }
+              - column: { name: lng, valueNumeric: 69.2381 }
+              - column: { name: status, value: "ONLINE" }
+              - column: { name: total_slots, valueNumeric: 4 }
+
+  - changeSet:
+      id: 002-seed-powerbanks
+      author: madina
+      changes:
+        # Station 1 — 4 docked powerbanks in slots 1-4
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0001-0001-0001-bbbbbbbbbb01" }
+              - column: { name: station_id, value: "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 1 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 98 }
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0001-0001-0001-bbbbbbbbbb02" }
+              - column: { name: station_id, value: "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 2 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 95 }
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0001-0001-0001-bbbbbbbbbb03" }
+              - column: { name: station_id, value: "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 3 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 90 }
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0001-0001-0001-bbbbbbbbbb04" }
+              - column: { name: station_id, value: "aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 4 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 100 }
+        # Station 2 — 2 docked powerbanks
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0002-0002-0002-bbbbbbbbbb01" }
+              - column: { name: station_id, value: "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 1 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 85 }
+        - insert:
+            tableName: powerbanks
+            columns:
+              - column: { name: id, value: "bbbbbbbb-0002-0002-0002-bbbbbbbbbb02" }
+              - column: { name: station_id, value: "aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa" }
+              - column: { name: slot_number, valueNumeric: 2 }
+              - column: { name: status, value: "DOCKED" }
+              - column: { name: battery_pct, valueNumeric: 80 }

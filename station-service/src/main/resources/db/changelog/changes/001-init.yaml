@@ -1,0 +1,125 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-stations
+      author: madina
+      changes:
+        - createTable:
+            tableName: stations
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lat
+                  type: double precision
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lng
+                  type: double precision
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(16)
+                  defaultValue: ONLINE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: total_slots
+                  type: integer
+                  defaultValueNumeric: 6
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        # PostGIS is not required — using Haversine in JPQL for nearby query
+        - createIndex:
+            tableName: stations
+            indexName: idx_stations_status
+            columns:
+              - column: { name: status }
+        - createIndex:
+            tableName: stations
+            indexName: idx_stations_lat_lng
+            columns:
+              - column: { name: lat }
+              - column: { name: lng }
+
+  - changeSet:
+      id: 001-create-powerbanks
+      author: madina
+      changes:
+        - createTable:
+            tableName: powerbanks
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: station_id
+                  type: uuid
+              - column:
+                  name: slot_number
+                  type: integer
+              - column:
+                  name: status
+                  type: varchar(24)
+                  defaultValue: DOCKED
+                  constraints:
+                    nullable: false
+              - column:
+                  name: battery_pct
+                  type: integer
+                  defaultValueNumeric: 100
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: powerbanks
+            baseColumnNames: station_id
+            referencedTableName: stations
+            referencedColumnNames: id
+            constraintName: fk_powerbanks_station
+        - createIndex:
+            tableName: powerbanks
+            indexName: idx_powerbanks_station_id
+            columns:
+              - column: { name: station_id }
+        - createIndex:
+            tableName: powerbanks
+            indexName: idx_powerbanks_status
+            columns:
+              - column: { name: status }
