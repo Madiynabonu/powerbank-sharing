@@ -83,6 +83,15 @@ public class KeycloakService {
         user.setCredentials(Collections.singletonList(cred));
 
         jakarta.ws.rs.core.Response resp = adminClient.realm(realm).users().create(user);
+        if (resp.getStatus() == 409) {
+            return adminClient.realm(realm).users().searchByUsername(phone, true)
+                    .stream().findFirst()
+                    .map(UserRepresentation::getId)
+                    .orElseThrow(() -> new RuntimeException("Concurrent user creation conflict for phone=" + maskPhone(phone)));
+        }
+        if (resp.getStatus() != 201) {
+            throw new RuntimeException("Keycloak user creation failed: HTTP " + resp.getStatus());
+        }
         String location = resp.getHeaderString("Location");
         String newId = location.substring(location.lastIndexOf('/') + 1);
         log.info("Created Keycloak user {} for phone={}", newId, maskPhone(phone));

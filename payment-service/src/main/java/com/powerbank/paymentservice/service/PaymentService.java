@@ -110,6 +110,7 @@ public class PaymentService {
         }
         Payment original = opt.get();
         if (original.getStatus() == PaymentStatus.FAILED
+                || original.getStatus() == PaymentStatus.CANCELLED
                 || original.getType() == PaymentType.CANCEL) {
             log.info("cancel: payment {} already terminal, skipping", original.getId());
             return;
@@ -127,8 +128,7 @@ public class PaymentService {
         card.setBalance(card.getBalance().add(original.getAmount()));
         cardRepository.save(card);
 
-        original.setStatus(PaymentStatus.FAILED);
-        original.setFailureReason("CANCELLED");
+        original.setStatus(PaymentStatus.CANCELLED);
         paymentRepository.save(original);
 
         Payment reversal = new Payment();

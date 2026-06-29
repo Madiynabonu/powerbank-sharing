@@ -49,20 +49,34 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
     @Override
     public void getRentalStatus(GetRentalStatusRequest request,
                                 StreamObserver<RentalStatusResponse> responseObserver) {
-        rentalService.findById(UUID.fromString(request.getId()))
-                .map(this::toStatusProto)
-                .ifPresentOrElse(
-                        proto -> { responseObserver.onNext(proto); responseObserver.onCompleted(); },
-                        () -> responseObserver.onError(
-                                Status.NOT_FOUND.withDescription("Rental not found: " + request.getId())
-                                        .asRuntimeException()));
+        try {
+            rentalService.findById(UUID.fromString(request.getId()))
+                    .map(this::toStatusProto)
+                    .ifPresentOrElse(
+                            proto -> { responseObserver.onNext(proto); responseObserver.onCompleted(); },
+                            () -> responseObserver.onError(
+                                    Status.NOT_FOUND.withDescription("Rental not found: " + request.getId())
+                                            .asRuntimeException()));
+        } catch (IllegalArgumentException e) {
+            responseObserver.onError(
+                    Status.INVALID_ARGUMENT.withDescription("Invalid rental ID: " + request.getId())
+                            .asRuntimeException());
+        }
     }
 
     @Override
     public void getRentalHistory(GetRentalHistoryRequest request,
                                  StreamObserver<GetRentalHistoryResponse> responseObserver) {
+        UUID userId;
         try {
-            UUID userId = UUID.fromString(request.getUserId());
+            userId = UUID.fromString(request.getUserId());
+        } catch (IllegalArgumentException e) {
+            responseObserver.onError(
+                    Status.INVALID_ARGUMENT.withDescription("Invalid user ID: " + request.getUserId())
+                            .asRuntimeException());
+            return;
+        }
+        try {
             Page<Rental> page = rentalService.findHistory(userId, request.getPage(), request.getPageSize());
             GetRentalHistoryResponse.Builder resp = GetRentalHistoryResponse.newBuilder()
                     .setTotal((int) page.getTotalElements());
@@ -78,9 +92,16 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
     @Override
     public void finishRental(FinishRentalRequest request,
                              StreamObserver<RentalStatusResponse> responseObserver) {
+        UUID rentalId, returnStationId;
         try {
-            UUID rentalId = UUID.fromString(request.getRentalId());
-            UUID returnStationId = UUID.fromString(request.getStationId());
+            rentalId = UUID.fromString(request.getRentalId());
+            returnStationId = UUID.fromString(request.getStationId());
+        } catch (IllegalArgumentException e) {
+            responseObserver.onError(
+                    Status.INVALID_ARGUMENT.withDescription(e.getMessage()).asRuntimeException());
+            return;
+        }
+        try {
             Rental rental = rentalService.finish(rentalId, returnStationId);
             responseObserver.onNext(toStatusProto(rental));
             responseObserver.onCompleted();

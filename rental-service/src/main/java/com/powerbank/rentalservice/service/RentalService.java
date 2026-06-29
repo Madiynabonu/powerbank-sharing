@@ -114,6 +114,11 @@ public class RentalService {
         if (rental == null) return;
 
         if ("FAILED".equals(result.status())) {
+            if (rental.getStatus() == RentalStatus.FINISHED || rental.getStatus() == RentalStatus.FAILED) {
+                log.info("Late payment failure ignored — rental {} already in terminal state {}",
+                        rental.getId(), rental.getStatus());
+                return;
+            }
             rental.fail(result.failureReason());
             rentalRepository.save(rental);
             log.warn("Rental {} FAILED at payment: {}", rental.getId(), result.failureReason());

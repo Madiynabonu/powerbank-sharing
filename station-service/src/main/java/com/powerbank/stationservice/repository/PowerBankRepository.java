@@ -13,8 +13,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface PowerBankRepository extends JpaRepository<PowerBank, UUID> {
 
-    List<PowerBank> findByStationIdAndStatus(UUID stationId, PowerBankStatus status);
-
     /**
      * Lock the first available (DOCKED) powerbank in a station to avoid two
      * concurrent rentals picking the same slot.

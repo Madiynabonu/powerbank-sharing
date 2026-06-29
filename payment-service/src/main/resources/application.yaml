@@ -24,20 +24,6 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: payment-service
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      properties:
-        spring.json.trusted.packages: "*"
-    producer:
-      acks: all                # wait for full ISR ack — do not lose payment events
-      retries: 10
-      properties:
-        enable.idempotence: true
-        max.in.flight.requests.per.connection: 5
-    listener:
-      ack-mode: record
 
 app:
   kafka:

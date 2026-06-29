@@ -15,6 +15,7 @@ databaseChangeLog:
               - column: { name: balance, valueNumeric: 500000.00 }
               - column: { name: currency, value: "UZS" }
               - column: { name: status, value: "ACTIVE" }
+              - column: { name: version, valueNumeric: 0 }
         - insert:
             tableName: cards
             columns:
@@ -24,3 +25,4 @@ databaseChangeLog:
               - column: { name: balance, valueNumeric: 1000.00 }
               - column: { name: currency, value: "UZS" }
               - column: { name: status, value: "ACTIVE" }
+              - column: { name: version, valueNumeric: 0 }

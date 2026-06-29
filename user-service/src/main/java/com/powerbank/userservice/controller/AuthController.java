@@ -1,9 +1,8 @@
 package com.powerbank.userservice.controller;
 
-import com.powerbank.userservice.domain.User;
-import com.powerbank.userservice.repository.UserRepository;
 import com.powerbank.userservice.service.KeycloakService;
 import com.powerbank.userservice.service.OtpService;
+import com.powerbank.userservice.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
@@ -24,7 +23,7 @@ public class AuthController {
 
     private final OtpService otpService;
     private final KeycloakService keycloakService;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @PostMapping("/auth/phone")
     public ResponseEntity<?> requestOtp(@Valid @RequestBody PhoneRequest req) {
@@ -38,13 +37,7 @@ public class AuthController {
         if (!valid) {
             return ResponseEntity.status(401).body(Map.of("error", "Invalid or expired OTP"));
         }
-        String keycloakId = keycloakService.getOrCreateUser(req.phone());
-        userRepository.findByPhone(req.phone()).orElseGet(() -> {
-            User u = User.create(req.phone());
-            u.setKeycloakId(keycloakId);
-            return userRepository.save(u);
-        });
-        KeycloakService.TokenResponse tokens = keycloakService.issueToken(req.phone());
+        KeycloakService.TokenResponse tokens = userService.registerAndIssueToken(req.phone());
         return ResponseEntity.ok(tokens);
     }
 
@@ -56,8 +49,8 @@ public class AuthController {
 
     @GetMapping("/v1/me")
     public ResponseEntity<?> me(@AuthenticationPrincipal Jwt jwt) {
-        String phone = jwt.getSubject();
-        return userRepository.findByPhone(phone)
+        String phone = jwt.getClaimAsString("preferred_username");
+        return userService.findByPhone(phone)
                 .map(u -> ResponseEntity.ok(Map.of(
                         "id", u.getId(),
                         "phone", u.getPhone(),

@@ -12,7 +12,10 @@ import com.powerbank.stationservice.repository.PowerBankRepository;
 import com.powerbank.stationservice.repository.StationRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -123,9 +126,14 @@ public class StationService {
         PowerBank pb = powerBankRepository.findById(powerbankId).orElseThrow(
                 () -> new IllegalArgumentException("PowerBank not found: " + powerbankId));
 
-        long occupiedSlots = station.getPowerBanks().stream()
-                .filter(p -> p.getSlotNumber() != null).count();
-        int freeSlot = (int) (occupiedSlots + 1);
+        Set<Integer> usedSlots = station.getPowerBanks().stream()
+                .filter(p -> p.getSlotNumber() != null)
+                .map(PowerBank::getSlotNumber)
+                .collect(Collectors.toSet());
+        int freeSlot = IntStream.rangeClosed(1, station.getTotalSlots())
+                .filter(s -> !usedSlots.contains(s))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No free slots at station: " + stationId));
 
         pb.setStation(station);
         pb.setSlotNumber(freeSlot);

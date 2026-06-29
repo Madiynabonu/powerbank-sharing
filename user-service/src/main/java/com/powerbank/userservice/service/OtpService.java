@@ -2,6 +2,7 @@ package com.powerbank.userservice.service;
 
 import com.powerbank.userservice.domain.OtpCode;
 import com.powerbank.userservice.repository.OtpCodeRepository;
+import com.powerbank.userservice.util.PhoneUtils;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +42,7 @@ public class OtpService {
         otpCodeRepository.save(otp);
 
         telegramOtpSender.send(phone, code);
-        log.info("OTP sent to phone={} (masked)", maskPhone(phone));
+        log.info("OTP sent to phone={} (masked)", PhoneUtils.mask(phone));
     }
 
     @Transactional
@@ -66,8 +67,4 @@ public class OtpService {
         return sb.toString();
     }
 
-    private String maskPhone(String phone) {
-        if (phone.length() < 4) return "****";
-        return phone.substring(0, phone.length() - 4) + "****";
-    }
 }

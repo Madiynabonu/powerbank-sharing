@@ -21,24 +21,6 @@
         <grpc-spring.version>3.1.0.RELEASE</grpc-spring.version>
     </properties>
 
-    <profiles>
-        <profile>
-            <id>os-windows-x86_64</id>
-            <activation><os><family>windows</family></os></activation>
-            <properties><os.detected.classifier>windows-x86_64</os.detected.classifier></properties>
-        </profile>
-        <profile>
-            <id>os-linux-x86_64</id>
-            <activation><os><family>unix</family><arch>amd64</arch></os></activation>
-            <properties><os.detected.classifier>linux-x86_64</os.detected.classifier></properties>
-        </profile>
-        <profile>
-            <id>os-linux-aarch64</id>
-            <activation><os><family>unix</family><arch>aarch64</arch></os></activation>
-            <properties><os.detected.classifier>linux-aarch_64</os.detected.classifier></properties>
-        </profile>
-    </profiles>
-
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -118,6 +100,13 @@
     </dependencies>
 
     <build>
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.7.1</version>
+            </extension>
+        </extensions>
         <plugins>
             <plugin>
                 <groupId>org.xolstice.maven.plugins</groupId>
