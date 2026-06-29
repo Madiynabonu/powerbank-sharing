@@ -143,9 +143,12 @@ services:
       retries: 20
       start_period: 120s
 
-  # ── Kong Gateway (DB-less) ─────────────────────────────────────────────────
+  # ── Kong Gateway (DB-less, custom image with lua-resty-openidc) ──────────────
   kong:
-    image: kong:3.7-ubuntu
+    build:
+      context: ./infra/kong
+      dockerfile: Dockerfile
+    image: kong-custom:3.7-oidc
     container_name: kong
     environment:
       KONG_DATABASE: "off"
@@ -260,6 +263,8 @@ services:
       DB_USERNAME: rental
       DB_PASSWORD: rental
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      STATION_GRPC_HOST: station-service
+      STATION_GRPC_PORT: 9092
     ports:
       - "8081:8081"
       - "9091:9091"
@@ -268,6 +273,8 @@ services:
       postgres-rental:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      station-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health || exit 1"]

@@ -16,6 +16,12 @@ All monetary columns use `NUMERIC(19,2)` in PostgreSQL and `BigDecimal` in Java.
 ### TIMESTAMPTZ vs TIMESTAMP
 `TIMESTAMPTZ` stores the moment in UTC and adjusts display to the session's timezone. `TIMESTAMP` (without timezone) stores a local wall-clock value with no timezone context, so the meaning changes if the DB or application server moves to a different timezone. For an app that could run globally, `TIMESTAMPTZ` is the only safe choice.
 
+### Station Endpoints via Rental Service
+`GET /v1/stations` and `GET /v1/stations/{id}` are exposed through the **rental-service** gRPC boundary, which internally calls station-service via a gRPC client stub. Kong routes all `/v1/stations` traffic to rental-service (grpc-gateway transcodes REST→gRPC), and rental-service acts as the single client-facing gRPC gateway for both rental and station operations. Station-service has no public HTTP routes — it is an internal service called only by rental-service. This keeps the public API surface consolidated on one gRPC service while preserving service boundaries internally.
+
+### Kong OIDC Plugin
+A custom Kong Dockerfile (`infra/kong/Dockerfile`) installs `lua-resty-openidc` and its dependencies (`lua-resty-http`, `lua-resty-session 3.x`) via luarocks on top of `kong:3.7-ubuntu`. This avoids the need for Kong Enterprise and makes the OAuth2 Token Introspection plugin available in the open-source image. The `oidc` plugin in `kong.yaml` calls Keycloak's introspection endpoint with `bearer_only: yes`, meaning Kong validates the JWT on every `/v1/*` request before forwarding to backend services.
+
 ### Index Strategy
 | Table | Index | Reason |
 |-------|-------|--------|
@@ -85,13 +91,12 @@ We return the **original** payment unchanged and log a warning. The idempotency 
 
 1. **Outbox pattern** for payment and station events — eliminate the DB/Kafka inconsistency window.
 2. **Real Telegram OTP** — implement the `/start` → `chat_id` registration flow and map phone numbers to Telegram chat IDs.
-3. **Kong OIDC plugin** — replace the stub `oidc` config with a fully tested `lua-resty-openidc` setup and verify introspection end-to-end.
-4. **gRPC transcoding** — test the Kong `grpc-gateway` plugin with the actual `.proto` files uploaded; verify field mapping for list queries.
-5. **Integration tests** — use `@SpringBootTest` + Testcontainers for real Postgres/Kafka round-trip tests.
-6. **Retry / compensation** — if the lock succeeds but payment fails, release the lock (currently the powerbank stays in EJECTING state forever).
-8. **Metrics** — expose Micrometer metrics (rental duration, payment failure rate) and wire to Prometheus/Grafana.
-9. **Rate limiting** — add Kong rate-limit plugin to `/auth/phone` to prevent OTP spam.
-10. **UUID v7** — replace random v4 with time-ordered v7 to improve B-tree index locality at scale.
+3. **gRPC transcoding** — test the Kong `grpc-gateway` plugin with the actual `.proto` files uploaded; verify field mapping for list queries.
+4. **Integration tests** — use `@SpringBootTest` + Testcontainers for real Postgres/Kafka round-trip tests.
+5. **Retry / compensation** — if the lock succeeds but payment fails, release the lock (currently the powerbank stays in EJECTING state forever).
+6. **Metrics** — expose Micrometer metrics (rental duration, payment failure rate) and wire to Prometheus/Grafana.
+7. **Rate limiting** — add Kong rate-limit plugin to `/auth/phone` to prevent OTP spam.
+8. **UUID v7** — replace random v4 with time-ordered v7 to improve B-tree index locality at scale.
 
 ---
 
@@ -99,6 +104,5 @@ We return the **original** payment unchanged and log a warning. The idempotency 
 
 1. **Station return flow**: when a user returns a powerbank to *a different* station, should station-service validate that the slot is free before accepting? The FSM currently trusts the rental-service's `returnStationId`. Is there a hardware lock-and-confirm step on return too?
 2. **Recurrent payment cadence**: the spec says "recurrent payment" without a specific interval. I chose 30 minutes as a reasonable MVP default. Is there a business rule (e.g., charge every N km, charge by battery level, charge at flat rate per day)?
-3. **Kong OIDC plugin**: the open-source Kong image does not include `lua-resty-openidc` by default. Production would need either Kong EE or a custom image. Should I add a Dockerfile that installs the plugin, or is Kong EE assumed?
-4. **Telegram OTP**: OTP delivery requires knowing the user's Telegram `chat_id`. This means the user must first message the bot to register. Is there a separate registration endpoint, or should the `/auth/phone` flow deep-link to the bot with a magic token?
-5. **Geo-index**: I used a Haversine formula in JPQL. For a production system with thousands of stations, PostGIS with a spatial index would be far more efficient. Should I add PostGIS to the station-service DB?
+3. **Telegram OTP**: OTP delivery requires knowing the user's Telegram `chat_id`. This means the user must first message the bot to register. Is there a separate registration endpoint, or should the `/auth/phone` flow deep-link to the bot with a magic token?
+4. **Geo-index**: I used a Haversine formula in JPQL. For a production system with thousands of stations, PostGIS with a spatial index would be far more efficient. Should I add PostGIS to the station-service DB?
