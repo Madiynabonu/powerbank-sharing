@@ -1,38 +1,58 @@
 package com.powerbank.userservice.service;
 
+import com.powerbank.userservice.repository.TelegramRegistrationRepository;
 import com.powerbank.userservice.util.PhoneUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 
-/**
- * Sends OTP codes via Telegram Bot API (or logs them in dev mode).
- *
- * In production, the phone number must be linked to a Telegram chat ID via a
- * prior registration step (out of scope for this MVP). Here we log the code
- * and optionally call the Telegram API if a token is configured.
- */
 @Component
 @Slf4j
 public class TelegramOtpSender {
 
+    private final WebClient webClient;
+    private final TelegramRegistrationRepository telegramRegistrationRepository;
     private final String botToken;
-    private final boolean enabled;
 
     public TelegramOtpSender(
-            @Value("${app.otp.telegram-bot-token:}") String botToken,
-            @Value("${app.otp.telegram-enabled:false}") boolean enabled) {
+            WebClient.Builder builder,
+            TelegramRegistrationRepository telegramRegistrationRepository,
+            @Value("${app.otp.telegram-bot-token:}") String botToken) {
+        this.webClient = builder.baseUrl("https://api.telegram.org").build();
+        this.telegramRegistrationRepository = telegramRegistrationRepository;
         this.botToken = botToken;
-        this.enabled = enabled;
     }
 
     public void send(String phone, String code) {
-        // Always log — in dev the log IS the OTP delivery channel
         log.info("[OTP] phone={} code={}", PhoneUtils.mask(phone), code);
 
-        if (!enabled || botToken == null || botToken.isBlank()) {
+        if (botToken.isBlank()) {
+            log.warn("Bot token not configured — OTP logged only");
             return;
         }
-        log.debug("Telegram OTP delivery is enabled but chat_id lookup not implemented in MVP");
+
+        String chatId = telegramRegistrationRepository.findByPhone(phone)
+                .map(r -> r.getChatId())
+                .orElse(null);
+
+        if (chatId == null) {
+            log.warn("No Telegram chat_id for phone={} — OTP logged only. " +
+                    "User must send their phone number to the bot first.", PhoneUtils.mask(phone));
+            return;
+        }
+
+        String text = "Sizning OTP kodingiz: *" + code + "*";
+        try {
+            webClient.get()
+                    .uri("/bot{token}/sendMessage?chat_id={chatId}&text={text}&parse_mode=Markdown",
+                            botToken, chatId, text)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+            log.info("OTP sent via Telegram to chat_id={}", chatId);
+        } catch (Exception e) {
+            log.error("Telegram send failed: {}", e.getMessage());
+        }
     }
 }

@@ -31,6 +31,10 @@ spring:
 grpc:
   server:
     port: ${GRPC_PORT:9091}
+  client:
+    station-service:
+      address: static://${STATION_GRPC_HOST:localhost}:${STATION_GRPC_PORT:9092}
+      negotiation-type: plaintext
 
 app:
   kafka:

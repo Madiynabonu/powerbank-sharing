@@ -42,8 +42,8 @@ app:
   otp:
     length: 6
     ttl-minutes: 5
-    telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
-    telegram-enabled: ${TELEGRAM_ENABLED:false}
+    telegram-bot-token: ${TELEGRAM_BOT_TOKEN:8583403539:AAFVArEbmBUpgyWSkQb4waB1G-QQu12jaJU}
+    telegram-chat-id: ${TELEGRAM_CHAT_ID:5179516273}
 
 management:
   endpoints:

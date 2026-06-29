@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-telegram-registrations
+      author: madina
+      changes:
+        - createTable:
+            tableName: telegram_registrations
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: phone
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: telegram_registrations
+            columnNames: phone
+            constraintName: uq_telegram_phone
+        - createIndex:
+            tableName: telegram_registrations
+            indexName: idx_telegram_phone
+            columns:
+              - column: { name: phone }

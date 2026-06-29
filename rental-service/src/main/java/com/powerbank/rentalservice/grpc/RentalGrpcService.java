@@ -6,17 +6,23 @@ import com.powerbank.rental.grpc.FinishRentalRequest;
 import com.powerbank.rental.grpc.GetRentalHistoryRequest;
 import com.powerbank.rental.grpc.GetRentalHistoryResponse;
 import com.powerbank.rental.grpc.GetRentalStatusRequest;
+import com.powerbank.rental.grpc.GetStationRequest;
+import com.powerbank.rental.grpc.GetStationsRequest;
+import com.powerbank.rental.grpc.GetStationsResponse;
 import com.powerbank.rental.grpc.RentalApiGrpc;
 import com.powerbank.rental.grpc.RentalStatusResponse;
 import com.powerbank.rental.grpc.RentalSummary;
+import com.powerbank.rental.grpc.StationDto;
 import com.powerbank.rentalservice.domain.Rental;
 import com.powerbank.rentalservice.service.RentalService;
+import com.powerbank.station.grpc.StationApiGrpc;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.devh.boot.grpc.client.inject.GrpcClient;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.springframework.data.domain.Page;
 
@@ -26,6 +32,9 @@ import org.springframework.data.domain.Page;
 public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
 
     private final RentalService rentalService;
+
+    @GrpcClient("station-service")
+    private StationApiGrpc.StationApiBlockingStub stationStub;
 
     @Override
     public void createRental(CreateRentalRequest request,
@@ -113,6 +122,61 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             log.error("finishRental failed", e);
             responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
         }
+    }
+
+    @Override
+    public void getStations(GetStationsRequest request,
+                            StreamObserver<GetStationsResponse> responseObserver) {
+        try {
+            com.powerbank.station.grpc.GetStationsRequest stationReq =
+                    com.powerbank.station.grpc.GetStationsRequest.newBuilder()
+                            .setLat(request.getLat())
+                            .setLng(request.getLng())
+                            .setRadiusM(request.getRadiusM())
+                            .setLimit(request.getLimit())
+                            .build();
+            com.powerbank.station.grpc.GetStationsResponse stationResp = stationStub.getStations(stationReq);
+            GetStationsResponse.Builder resp = GetStationsResponse.newBuilder();
+            stationResp.getStationsList().forEach(s -> resp.addStations(toStationDto(s)));
+            responseObserver.onNext(resp.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("getStations failed", e);
+            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getStation(GetStationRequest request,
+                           StreamObserver<StationDto> responseObserver) {
+        try {
+            com.powerbank.station.grpc.GetStationRequest stationReq =
+                    com.powerbank.station.grpc.GetStationRequest.newBuilder()
+                            .setId(request.getId())
+                            .build();
+            com.powerbank.station.grpc.Station s = stationStub.getStation(stationReq);
+            responseObserver.onNext(toStationDto(s));
+            responseObserver.onCompleted();
+        } catch (io.grpc.StatusRuntimeException e) {
+            responseObserver.onError(e);
+        } catch (Exception e) {
+            log.error("getStation failed", e);
+            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+        }
+    }
+
+    private StationDto toStationDto(com.powerbank.station.grpc.Station s) {
+        return StationDto.newBuilder()
+                .setId(s.getId())
+                .setName(s.getName())
+                .setLat(s.getLat())
+                .setLng(s.getLng())
+                .setStatus(s.getStatus())
+                .setTotalSlots(s.getTotalSlots())
+                .setAvailablePowerbanks(s.getAvailablePowerbanks())
+                .setFreeSlots(s.getFreeSlots())
+                .setDistanceM(s.getDistanceM())
+                .build();
     }
 
     private RentalStatusResponse toStatusProto(Rental r) {

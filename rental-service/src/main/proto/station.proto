@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package powerbank.station;
+
+import "google/api/annotations.proto";
+
+option java_multiple_files = true;
+option java_package = "com.powerbank.station.grpc";
+option java_outer_classname = "StationProto";
+
+// Station service exposes read APIs over gRPC. Kong transcodes the REST
+// endpoints below into these gRPC calls (grpc-gateway plugin).
+service StationApi {
+  // GET /v1/stations?lat=..&lng=..&radius_m=..&limit=..  (nearby stations)
+  rpc GetStations(GetStationsRequest) returns (GetStationsResponse) {
+    option (google.api.http) = {
+      get: "/v1/stations"
+    };
+  }
+
+  // GET /v1/stations/{id}
+  rpc GetStation(GetStationRequest) returns (Station) {
+    option (google.api.http) = {
+      get: "/v1/stations/{id}"
+    };
+  }
+}
+
+message GetStationsRequest {
+  double lat = 1;
+  double lng = 2;
+  int32 radius_m = 3;   // search radius in meters; 0 => no distance filter
+  int32 limit = 4;      // 0 => default page size
+}
+
+message GetStationsResponse {
+  repeated Station stations = 1;
+}
+
+message GetStationRequest {
+  string id = 1;
+}
+
+message Station {
+  string id = 1;
+  string name = 2;
+  double lat = 3;
+  double lng = 4;
+  string status = 5;              // ONLINE / OFFLINE
+  int32 total_slots = 6;
+  int32 available_powerbanks = 7; // powerbanks ready to dispense
+  int32 free_slots = 8;           // empty slots available for return
+  double distance_m = 9;          // distance from the query point, if provided
+}

@@ -1,4 +1,6 @@
-# DECISIONS.md — Powerbank Sharing MVP
+
+Talab	Ustuvorlik
+Telegram orqali OTP tasdiqlash bilan telefon raqami bo'yicha foydalanuvchini ro'yxatdan o'tkazish va autentifikatsiya qilish# DECISIONS.md — Powerbank Sharing MVP
 
 ## Architecture Decisions
 
