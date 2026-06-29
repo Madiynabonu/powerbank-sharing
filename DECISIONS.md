@@ -49,6 +49,36 @@ Keycloak is the most complete open-source OAuth2/OIDC server available as a Dock
 ### Kong OIDC Plugin
 A custom Kong Dockerfile (`infra/kong/Dockerfile`) installs `lua-resty-openidc` and its dependencies (`lua-resty-http`, `lua-resty-session 3.x`) via luarocks on top of `kong:3.7-ubuntu`. This avoids the need for Kong Enterprise and makes the OAuth2 Token Introspection plugin available in the open-source image. The `oidc` plugin in `kong.yaml` calls Keycloak's introspection endpoint with `bearer_only: yes`, meaning Kong validates the JWT on every `/v1/*` request before forwarding to backend services.
 
+### Kafka KRaft Mode (No ZooKeeper)
+Kafka runs in KRaft mode (`KAFKA_PROCESS_ROLES: broker,controller`) — the built-in Raft consensus introduced in Kafka 3.x that replaces ZooKeeper. This removes one entire process from docker-compose and is the direction Kafka is heading for production clusters. For a single-node MVP setup the simplification is significant; KRaft has been production-ready since Kafka 3.3 so this is low-risk.
+
+### Haversine in JPQL Instead of PostGIS
+Nearby-station queries use an `acos(cos(...)...)` Haversine formula in a JPQL `@Query`. PostGIS would give a proper spatial index but requires adding the extension to the PostgreSQL container and increases operational complexity. For city-scale distances (<100 km) Haversine is accurate to <0.1%. The composite `(lat, lng)` index pre-narrows the candidate set. The trade-off (no spatial index on large datasets) is acknowledged in the Questions section.
+
+### Liquibase Over Flyway
+All four services use `org.liquibase:liquibase-core` with `ddl-auto: none` — Hibernate never touches DDL. Liquibase YAML changelogs are more readable than SQL when mixing DDL + DML seed data, and the checksum mechanism prevents changeset re-execution without extra `ON CONFLICT DO NOTHING` guards. Quartz schema initialization is also delegated to Liquibase (`initialize-schema: never`) so the entire schema history — including scheduler tables — lives in one migration log.
+
+### Seed Data via Liquibase Changeset
+Demo stations, powerbanks, and payment cards are inserted in versioned Liquibase changesets (e.g. `002-seed-demo-data.yaml`), not in a `data.sql` or `@PostConstruct` bean. A changeset runs exactly once (checksum-gated) and appears in the migration history. A `data.sql` would re-run on every restart unless manually guarded.
+
+### No Kafka `__TypeId__` Headers — Plain JSON
+All producer/consumer configs set `ADD_TYPE_INFO_HEADERS: false` and `USE_TYPE_INFO_HEADERS: false`. Spring Kafka normally embeds a `__TypeId__` header with the producer's fully-qualified class name, which couples consumers to the producer's package structure — a class rename on the producer side silently breaks deserialization on the consumer. With headers disabled, the payload is plain JSON and each listener factory pins the target type explicitly (`VALUE_DEFAULT_TYPE`). Producers and consumers can evolve independently.
+
+### AckMode.RECORD + Dead-Letter Topic After 3 Retries
+All Kafka listeners use `AckMode.RECORD` (offset committed after each record, not after the batch) and `ENABLE_AUTO_COMMIT_CONFIG: false`. On failure, `FixedBackOff(1000 ms, 3 attempts)` retries three times, then `DeadLetterPublishingRecoverer` forwards the message to `<topic>.DLT`. This ensures: (1) a failure on record N does not cause records 0..N-1 to be reprocessed; (2) a poison-pill message does not block the partition forever; (3) failed messages are preserved in the DLT for inspection and replay.
+
+### `saveAndFlush` for Idempotency Race Condition
+`PaymentService` uses `saveAndFlush()` instead of `save()` when inserting a payment. `save()` defers the SQL INSERT until the transaction commits; if a unique-constraint violation on `idempotency_key` surfaces at that point it is uncatchable in the method body. `saveAndFlush()` forces an immediate flush so the `DataIntegrityViolationException` is caught inside the try/catch and re-queried, making the concurrent-duplicate path work correctly.
+
+### `open-in-view: false`
+All services set `jpa.open-in-view: false`. Spring Boot defaults this to `true`, which keeps the Hibernate session open for the full HTTP request lifetime, enabling lazy-loading outside `@Transactional` boundaries and holding a DB connection during view rendering. With microservices there is no view layer, so the open session wastes connections and masks N+1 bugs. Disabling it forces all DB access to stay within explicit transaction boundaries.
+
+### IoT Hardware Simulation with Configurable Failure Rate
+`station-service` has no real hardware. `simulateLock()` and `simulateEject()` call `Thread.sleep()` (500 ms / 800 ms) to model async latency and inject a 5% random failure via `ThreadLocalRandom`. All three values (`lock-sim-delay-ms`, `eject-sim-delay-ms`, `failure-rate`) are externalised to `application.yaml`. This makes the compensating code paths (cancel-payment-command, rollback to DOCKED) exercisable in the running system without any hardware.
+
+### Recurrent Payment Interval: 30 Minutes at 1 000 UZS
+The spec mandates recurrent payment but does not specify an interval or amount. 30 minutes and 1 000 UZS were chosen as a sensible MVP default — frequent enough to test the scheduler, low enough not to drain the demo card balance immediately. Both values are externalised via `@Value` (`recurrent-interval-minutes`, `recurrent-amount`) so they can be overridden without recompile.
+
 ### Index Strategy
 | Table | Index | Reason |
 |---|---|---|
