@@ -20,12 +20,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Business logic for station operations. All IoT calls are asynchronous —
- * the caller publishes a command and receives a result event; this service
- * simulates the hardware delay with a Thread.sleep inside a virtual thread
- * (or a scheduled task) rather than blocking the Kafka consumer.
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -43,8 +37,6 @@ public class StationService {
     @Value("${app.station.failure-rate}")
     private double failureRate;
 
-    // ---------------------------------------------------------------------- gRPC read side
-
     public Optional<Station> findById(String id) {
         try {
             return stationRepository.findById(java.util.UUID.fromString(id));
@@ -59,15 +51,10 @@ public class StationService {
                 PageRequest.of(0, pageSize));
     }
 
-    // ---------------------------------------------------------------------- lock simulation
-
     /**
-     * Simulates the station locking a slot so no other rental can claim the same
-     * powerbank. If successful, the selected powerbank transitions to EJECTING and
-     * the result carries its ID + slot number.
-     *
-     * This runs in the Kafka listener thread; it calls Thread.sleep to model the
-     * async IoT delay (real hardware would respond asynchronously).
+     * Simulates the async IoT cabinet-lock sequence. Thread.sleep models the real
+     * hardware latency; the Kafka listener thread blocks intentionally here rather
+     * than introducing a separate async layer for the MVP.
      */
     @Transactional
     public AcquireLockResult simulateLock(AcquireLockCommand cmd) {
@@ -97,8 +84,6 @@ public class StationService {
         return new AcquireLockResult(cmd.rentalId(), cmd.stationId(), pb.getId(), pb.getSlotNumber(), true, null);
     }
 
-    // ---------------------------------------------------------------------- eject simulation
-
     @Transactional
     public EjectResult simulateEject(EjectCommand cmd) {
         log.info("Simulating eject powerbank={} rental={}", cmd.powerbankId(), cmd.rentalId());
@@ -106,7 +91,7 @@ public class StationService {
 
         if (shouldFail()) {
             log.warn("Simulated eject FAILURE for rental={}", cmd.rentalId());
-            // roll back the powerbank status to DOCKED so it can be retried
+            // roll back to DOCKED so the slot becomes available for the next rental
             powerBankRepository.findById(cmd.powerbankId()).ifPresent(pb -> {
                 pb.setStatus(PowerBankStatus.DOCKED);
                 powerBankRepository.save(pb);
@@ -131,8 +116,6 @@ public class StationService {
         return new EjectResult(cmd.rentalId(), cmd.stationId(), pb.getId(), cmd.slotNumber(), true, null);
     }
 
-    // ---------------------------------------------------------------------- return simulation
-
     @Transactional
     public void returnPowerBank(java.util.UUID powerbankId, java.util.UUID stationId) {
         Station station = stationRepository.findById(stationId).orElseThrow(
@@ -140,7 +123,6 @@ public class StationService {
         PowerBank pb = powerBankRepository.findById(powerbankId).orElseThrow(
                 () -> new IllegalArgumentException("PowerBank not found: " + powerbankId));
 
-        // find a free slot
         long occupiedSlots = station.getPowerBanks().stream()
                 .filter(p -> p.getSlotNumber() != null).count();
         int freeSlot = (int) (occupiedSlots + 1);
@@ -151,8 +133,6 @@ public class StationService {
         powerBankRepository.save(pb);
         log.info("Returned powerbank={} to station={} slot={}", powerbankId, stationId, freeSlot);
     }
-
-    // ---------------------------------------------------------------------- helpers
 
     private boolean shouldFail() {
         return ThreadLocalRandom.current().nextDouble() < failureRate;

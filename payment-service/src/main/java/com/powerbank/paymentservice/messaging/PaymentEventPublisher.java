@@ -10,10 +10,11 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Publishes the targeted reply ({@code payment-result}, keyed by rentalId so a
- * rental's events stay ordered) and the audit event ({@code payment-events},
- * keyed by cardId so a card's history stays ordered). See DECISIONS.md for why
- * the key choice matters for ordering.
+ * Publishes two events per payment:
+ * - payment-result (keyed by rentalId): targeted reply to rental-service; rentalId key keeps
+ *   all results for one rental on the same partition, in order.
+ * - payment-events (keyed by cardId): append-only audit stream; cardId key keeps a card's
+ *   history ordered on one partition.
  */
 @Component
 @Slf4j
@@ -40,7 +41,6 @@ public class PaymentEventPublisher {
                 payment.getType().name(),
                 payment.getStatus().name(),
                 payment.getFailureReason());
-        // key = rentalId: every result for one rental lands on the same partition, in order
         String resultKey = payment.getRentalId() != null
                 ? payment.getRentalId().toString()
                 : payment.getId().toString();
@@ -56,7 +56,6 @@ public class PaymentEventPublisher {
                 payment.getType().name(),
                 payment.getStatus().name(),
                 OffsetDateTime.now());
-        // key = cardId: a card's payment history stays ordered on one partition
         kafkaTemplate.send(paymentEventsTopic, payment.getCardId().toString(), event);
 
         log.debug("Published payment-result + payment-events for payment {}", payment.getId());

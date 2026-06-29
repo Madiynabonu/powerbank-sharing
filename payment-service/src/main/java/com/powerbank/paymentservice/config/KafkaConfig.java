@@ -27,9 +27,9 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.util.backoff.FixedBackOff;
 
 /**
- * Kafka wiring. Cross-service events travel as plain JSON with NO type headers,
- * so each service can deserialize into its own local record class even though
- * package names differ. Each listener factory pins the concrete target type.
+ * Cross-service events travel as plain JSON with no type headers so each service
+ * deserializes into its own local record class. Each listener factory pins the
+ * concrete target type to avoid type-header coupling across service boundaries.
  */
 @Configuration
 public class KafkaConfig {
@@ -52,20 +52,17 @@ public class KafkaConfig {
     @Value("${app.kafka.topics.cancel-payment-command}")
     private String cancelPaymentCommandTopic;
 
-    // ---------------------------------------------------------------- producer
-
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        // acks=all + idempotent producer => no silent loss / no duplicates on retry
+        // acks=all + idempotent: no silent loss and no duplicates on retry
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         props.put(ProducerConfig.RETRIES_CONFIG, 10);
         props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
-        // keep payloads provider-agnostic across services
         props.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
         return new DefaultKafkaProducerFactory<>(props);
     }
@@ -74,8 +71,6 @@ public class KafkaConfig {
     public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> pf) {
         return new KafkaTemplate<>(pf);
     }
-
-    // ---------------------------------------------------------------- consumer
 
     private <T> ConsumerFactory<String, T> consumerFactory(Class<T> type) {
         Map<String, Object> props = new HashMap<>();
@@ -99,7 +94,6 @@ public class KafkaConfig {
         factory.setConsumerFactory(consumerFactory(type));
         factory.getContainerProperties().setAckMode(
                 org.springframework.kafka.listener.ContainerProperties.AckMode.RECORD);
-        // poison messages: retry a few times, then route to <topic>.DLT instead of blocking the partition
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template);
         factory.setCommonErrorHandler(new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3)));
         return factory;
@@ -122,8 +116,6 @@ public class KafkaConfig {
             KafkaTemplate<String, Object> template) {
         return listenerFactory(CancelPaymentCommand.class, template);
     }
-
-    // ------------------------------------------------------------------ topics
 
     @Bean
     public org.apache.kafka.clients.admin.NewTopic paymentRequestTopic() {

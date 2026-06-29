@@ -10,12 +10,16 @@ spring:
     password: ${DB_PASSWORD:payment}
   jpa:
     hibernate:
-      ddl-auto: none          # schema is owned by Liquibase, never by Hibernate
+      ddl-auto: none
     open-in-view: false
     properties:
       hibernate:
         jdbc:
           time_zone: UTC
+        jakarta:
+          persistence:
+            lock:
+              timeout: 5000
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
   kafka:

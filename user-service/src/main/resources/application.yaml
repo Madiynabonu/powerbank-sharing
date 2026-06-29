@@ -23,15 +23,6 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/powerbank}
-
-keycloak:
-  server-url: ${KEYCLOAK_URL:http://localhost:8180}
-  realm: ${KEYCLOAK_REALM:powerbank}
-  admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
-  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:admin-cli-secret}
-  user-client-id: ${KEYCLOAK_USER_CLIENT_ID:powerbank-app}
-  user-client-secret: ${KEYCLOAK_USER_CLIENT_SECRET:powerbank-app-secret}
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -41,6 +32,15 @@ keycloak:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
 
+keycloak:
+  server-url: ${KEYCLOAK_URL:http://localhost:8180}
+  realm: ${KEYCLOAK_REALM:powerbank}
+  admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:admin-cli-secret}
+  user-client-id: ${KEYCLOAK_USER_CLIENT_ID:powerbank-app}
+  user-client-secret: ${KEYCLOAK_USER_CLIENT_SECRET:powerbank-app-secret}
+  auth-password-salt: ${KEYCLOAK_PASSWORD_SALT:dev-salt-change-in-prod}
+
 app:
   kafka:
     topics:
@@ -48,8 +48,6 @@ app:
   otp:
     length: 6
     ttl-minutes: 5
-    # In production this would send via real Telegram bot; here it logs the code.
-    # Set TELEGRAM_BOT_TOKEN to enable real delivery.
     telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
     telegram-enabled: ${TELEGRAM_ENABLED:false}
 

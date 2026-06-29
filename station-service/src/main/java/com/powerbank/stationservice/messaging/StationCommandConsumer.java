@@ -13,11 +13,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Consumes station commands from rental-service and replies with results.
- * The simulation delay happens inside {@link StationService} — this keeps
- * the consumer blocked deliberately (models real async IoT latency).
- */
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -38,7 +33,6 @@ public class StationCommandConsumer {
     public void onAcquireLock(AcquireLockCommand cmd) {
         log.info("Station received acquire-lock command rental={}", cmd.rentalId());
         AcquireLockResult result = stationService.simulateLock(cmd);
-        // key = rentalId for ordered delivery to rental-service
         kafkaTemplate.send(lockResultTopic, cmd.rentalId().toString(), result);
     }
 

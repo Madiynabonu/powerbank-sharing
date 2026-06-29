@@ -9,12 +9,10 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Entry point for charge/refund commands. The DB transaction commits inside
- * {@link PaymentService#process}, then we publish to Kafka. If the publish
- * fails the consumer offset is not committed and the record is redelivered;
- * because {@code process} is idempotent the retry returns the same Payment and
- * re-publishes — at-least-once with no double charge. (Outbox would close the
- * remaining gap — see DECISIONS.md.)
+ * Processes charge/refund commands. PaymentService.process() is idempotent, so
+ * Kafka redelivery (offset not committed on DB failure) re-publishes the same
+ * result — at-least-once with no double charge. The remaining DB-commit/Kafka-publish
+ * gap is acknowledged in DECISIONS.md (Outbox pattern).
  */
 @Component
 @Slf4j

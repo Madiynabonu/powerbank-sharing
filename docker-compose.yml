@@ -141,7 +141,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 20
-      start_period: 60s
+      start_period: 120s
 
   # ── Kong Gateway (DB-less) ─────────────────────────────────────────────────
   kong:
@@ -159,16 +159,23 @@ services:
       KONG_PLUGINS: bundled,grpc-gateway,oidc
     volumes:
       - ./infra/kong/kong.yaml:/usr/local/kong/declarative/kong.yaml:ro
-      # proto files are needed by grpc-gateway plugin for transcoding
       - ./station-service/src/main/proto/station.proto:/usr/local/kong/protos/station.proto:ro
       - ./rental-service/src/main/proto/rental.proto:/usr/local/kong/protos/rental.proto:ro
       - ./station-service/src/main/proto/google:/usr/local/kong/protos/google:ro
     ports:
-      - "8000:8000"   # Kong proxy (public API)
-      - "8001:8001"   # Kong Admin API
+      - "8000:8000"
+      - "8001:8001"
     networks: [powerbank]
     depends_on:
       keycloak:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      station-service:
+        condition: service_healthy
+      rental-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "kong", "health"]
@@ -194,6 +201,7 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET: admin-cli-secret
       KEYCLOAK_USER_CLIENT_ID: powerbank-app
       KEYCLOAK_USER_CLIENT_SECRET: powerbank-app-secret
+      KEYCLOAK_PASSWORD_SALT: prod-salt-replace-me
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "8080:8080"

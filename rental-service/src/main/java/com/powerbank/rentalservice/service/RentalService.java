@@ -26,21 +26,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Finite State Machine for the rental lifecycle (see sequence diagram in DECISIONS.md):
+ * FSM orchestrator for the rental lifecycle:
  *
- *   WAITING
- *     → [publish acquire-cabinet-lock-event] → STATION_LOCK
- *   STATION_LOCK
- *     → [lock success] → [publish payment-request] → PROCESSING_PAYMENT
- *     → [lock failure] → FAILED
- *   PROCESSING_PAYMENT
- *     → [payment SUCCEEDED] → [publish eject-powerbank-event] → PROCESSING_PAYMENT (still, waiting for eject)
- *       ... in practice eject comes back and we → IN_THE_LEASE
- *     → [payment FAILED] → FAILED
- *   IN_THE_LEASE
- *     → [finish] → FINISHED
+ *   WAITING → STATION_LOCK → PROCESSING_PAYMENT → IN_THE_LEASE → FINISHED
+ *                                                              ↘ FAILED (any step)
  *
- * Note: eject result comes on a different topic, handled in processEjectResult().
+ * State transitions are driven by Kafka result events from station-service and payment-service.
  */
 @Service
 @Slf4j
@@ -68,15 +59,12 @@ public class RentalService {
     @Value("${app.rental.recurrent-charge-amount}")
     private BigDecimal recurrentChargeAmount;
 
-    // ---------------------------------------------------------------- create
-
     @Transactional
     public Rental create(UUID userId, UUID stationId, UUID cardId) {
         Rental rental = Rental.create(userId, stationId, cardId);
         rentalRepository.save(rental);
         log.info("Rental {} created for user={} station={}", rental.getId(), userId, stationId);
 
-        // Step 1: ask station to lock a cabinet
         AcquireLockCommand cmd = new AcquireLockCommand(
                 rental.getId().toString(), rental.getId(), stationId);
         kafkaTemplate.send(acquireLockTopic, rental.getId().toString(), cmd);
@@ -85,8 +73,6 @@ public class RentalService {
 
         return rental;
     }
-
-    // ---------------------------------------------------------------- FSM transitions
 
     @Transactional
     public void processLockResult(AcquireLockResult result) {
@@ -110,7 +96,7 @@ public class RentalService {
         rentalRepository.save(rental);
         log.info("Rental {} lock ok powerbank={} -> sending payment", rental.getId(), result.powerbankId());
 
-        // Step 2: request payment (idempotencyKey ensures at-most-once charge)
+        // idempotencyKey = "rental-start-{id}" ensures at-most-once charge even on Kafka redelivery
         PaymentRequest pr = new PaymentRequest(
                 "rental-start-" + rental.getId(),
                 rental.getId(),
@@ -137,7 +123,6 @@ public class RentalService {
         if ("SUCCEEDED".equals(result.status())
                 && rental.getStatus() == RentalStatus.PROCESSING_PAYMENT) {
             log.info("Rental {} payment ok -> ejecting powerbank", rental.getId());
-            // Step 3: eject the powerbank
             EjectCommand eject = new EjectCommand(
                     rental.getId().toString(),
                     rental.getId(),
@@ -159,10 +144,9 @@ public class RentalService {
             rental.fail(result.errorReason());
             rentalRepository.save(rental);
             log.warn("Rental {} FAILED at eject: {}", rental.getId(), result.errorReason());
-            // Payment already SUCCEEDED at this point — issue a cancellation refund
-            CancelPaymentCommand cancel = new CancelPaymentCommand(
-                    "rental-start-" + rental.getId(), rental.getId());
-            kafkaTemplate.send(cancelPaymentTopic, rental.getId().toString(), cancel);
+            // payment already SUCCEEDED — issue a cancellation so the card balance is restored
+            kafkaTemplate.send(cancelPaymentTopic, rental.getId().toString(),
+                    new CancelPaymentCommand("rental-start-" + rental.getId(), rental.getId()));
             return;
         }
 
@@ -171,8 +155,6 @@ public class RentalService {
         rentalRepository.save(rental);
         log.info("Rental {} IN_THE_LEASE powerbank={}", rental.getId(), result.powerbankId());
     }
-
-    // ---------------------------------------------------------------- finish
 
     @Transactional
     public Rental finish(UUID rentalId, UUID returnStationId) {
@@ -188,21 +170,17 @@ public class RentalService {
         rental.setFinishedAt(OffsetDateTime.now());
         rentalRepository.save(rental);
 
-        // Notify station-service to dock the powerbank back into the return station
-        ReturnPowerbankCommand returnCmd = new ReturnPowerbankCommand(
-                rental.getId(), rental.getPowerbankId(), returnStationId);
-        kafkaTemplate.send(returnPowerbankTopic, rental.getId().toString(), returnCmd);
+        kafkaTemplate.send(returnPowerbankTopic, rental.getId().toString(),
+                new ReturnPowerbankCommand(rental.getId(), rental.getPowerbankId(), returnStationId));
 
         log.info("Rental {} FINISHED, powerbank {} returning to station {}",
                 rentalId, rental.getPowerbankId(), returnStationId);
         return rental;
     }
 
-    // ---------------------------------------------------------------- recurrent charge
-
     /**
-     * Called by the Quartz scheduler periodically. Charges the card for each
-     * active rental.
+     * Called by the Quartz scheduler. Idempotency key includes timestamp so each interval
+     * generates a distinct charge — intentional, not a bug.
      */
     @Transactional
     public void chargeActiveRentals() {
@@ -221,8 +199,6 @@ public class RentalService {
         }
     }
 
-    // ---------------------------------------------------------------- queries
-
     public Optional<Rental> findById(UUID id) {
         return rentalRepository.findById(id);
     }
@@ -231,8 +207,6 @@ public class RentalService {
         int size = (pageSize > 0 && pageSize <= 100) ? pageSize : 20;
         return rentalRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
     }
-
-    // ---------------------------------------------------------------- helpers
 
     private Rental findByIdOrLog(UUID rentalId) {
         return rentalRepository.findById(rentalId)

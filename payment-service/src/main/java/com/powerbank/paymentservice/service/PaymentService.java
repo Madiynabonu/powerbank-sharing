@@ -17,17 +17,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Owns the financial state machine for a single {@link Payment}.
- *
- * <p>Atomicity: the whole charge/refund runs in ONE DB transaction, and the
- * card row is taken under a pessimistic write lock, so concurrent operations on
- * the same card are serialized and the balance can never go negative or be lost.
- *
- * <p>Idempotency: {@code idempotency_key} is UNIQUE. A repeat request returns
- * the already-persisted Payment instead of creating a new one. The check-then-
- * insert race is closed by catching the unique-constraint violation.
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -37,8 +26,9 @@ public class PaymentService {
     private final CardRepository cardRepository;
 
     /**
-     * Process a charge or refund idempotently. Always returns a persisted
-     * Payment (existing one on a duplicate key).
+     * Idempotent charge/refund. On duplicate idempotency_key the existing payment
+     * is returned; the check-then-insert race is closed by catching the unique-constraint
+     * violation and re-querying for the winner.
      */
     @Transactional
     public Payment process(PaymentRequest request) {
@@ -49,7 +39,6 @@ public class PaymentService {
         try {
             return executeNew(request);
         } catch (DataIntegrityViolationException raceLost) {
-            // a concurrent request with the same key won the insert — return its payment
             log.warn("Idempotency race for key={}, returning the winning payment", request.idempotencyKey());
             return paymentRepository.findByIdempotencyKey(request.idempotencyKey())
                     .orElseThrow(() -> raceLost);
@@ -58,8 +47,7 @@ public class PaymentService {
 
     private Payment handleDuplicate(Payment existing, PaymentRequest request) {
         if (existing.getAmount().compareTo(request.amount()) != 0) {
-            // Same key, different amount: idempotency means "same key == same operation".
-            // We DO NOT apply the new amount; we return the original and flag it.
+            // Same key + different amount: per Stripe semantics we return the original unchanged.
             log.warn("Idempotency conflict: key={} first amount={} now amount={} -> returning original",
                     request.idempotencyKey(), existing.getAmount(), request.amount());
         } else {
@@ -70,18 +58,15 @@ public class PaymentService {
     }
 
     private Payment executeNew(PaymentRequest request) {
-        PaymentType type = PaymentType.valueOf(request.type());
+        PaymentType type;
+        try {
+            type = PaymentType.valueOf(request.type());
+        } catch (IllegalArgumentException e) {
+            Payment payment = buildPayment(request, PaymentType.CHARGE);
+            return fail(payment, "INVALID_PAYMENT_TYPE");
+        }
 
-        Payment payment = new Payment();
-        payment.setId(UUID.randomUUID());
-        payment.setIdempotencyKey(request.idempotencyKey());
-        payment.setCardId(request.cardId());
-        payment.setRentalId(request.rentalId());
-        payment.setUserId(request.userId());
-        payment.setAmount(request.amount());
-        payment.setCurrency(request.currency() == null ? "UZS" : request.currency());
-        payment.setType(type);
-        payment.setStatus(PaymentStatus.PENDING);
+        Payment payment = buildPayment(request, type);
 
         Card card = cardRepository.findByIdForUpdate(request.cardId()).orElse(null);
         if (card == null) {
@@ -99,32 +84,22 @@ public class PaymentService {
                 return fail(payment, "INSUFFICIENT_FUNDS");
             }
             card.setBalance(card.getBalance().subtract(request.amount()));
-        } else { // REFUND
+        } else {
             card.setBalance(card.getBalance().add(request.amount()));
         }
 
         cardRepository.save(card);
         payment.setStatus(PaymentStatus.SUCCEEDED);
-        // unique-constraint violation on idempotency_key surfaces here / on flush
+        // saveAndFlush so the unique-constraint violation on idempotency_key surfaces here, not at commit
         Payment saved = paymentRepository.saveAndFlush(payment);
         log.info("Payment {} {} amount={} card={} -> SUCCEEDED (balance now {})",
                 saved.getId(), type, saved.getAmount(), card.getId(), card.getBalance());
         return saved;
     }
 
-    private Payment fail(Payment payment, String reason) {
-        payment.setStatus(PaymentStatus.FAILED);
-        payment.setFailureReason(reason);
-        Payment saved = paymentRepository.saveAndFlush(payment);
-        log.warn("Payment {} {} amount={} -> FAILED ({})",
-                saved.getId(), saved.getType(), saved.getAmount(), reason);
-        return saved;
-    }
-
     /**
-     * Cancel a previously SUCCEEDED payment identified by its idempotency key.
-     * Refunds the card balance in the same pessimistic-lock transaction.
-     * No-op if already CANCELLED or not found.
+     * Reverse a SUCCEEDED payment. Refunds the card balance and creates a CANCEL record.
+     * No-op if payment is already terminal or not found.
      */
     @Transactional
     public void cancel(String originalIdempotencyKey) {
@@ -171,7 +146,6 @@ public class PaymentService {
                 original.getId(), reversal.getId(), card.getBalance());
     }
 
-    /** Bind / register an emulated card (modelled here without a real acquirer). */
     @Transactional
     public Card bindCard(UUID cardId, UUID userId, String maskedPan, BigDecimal initialBalance, String currency) {
         return cardRepository.findById(cardId).orElseGet(() -> {
@@ -182,5 +156,28 @@ public class PaymentService {
             log.info("Bound card {} for user {}", saved.getId(), userId);
             return saved;
         });
+    }
+
+    private Payment buildPayment(PaymentRequest request, PaymentType type) {
+        Payment payment = new Payment();
+        payment.setId(UUID.randomUUID());
+        payment.setIdempotencyKey(request.idempotencyKey());
+        payment.setCardId(request.cardId());
+        payment.setRentalId(request.rentalId());
+        payment.setUserId(request.userId());
+        payment.setAmount(request.amount());
+        payment.setCurrency(request.currency() == null ? "UZS" : request.currency());
+        payment.setType(type);
+        payment.setStatus(PaymentStatus.PENDING);
+        return payment;
+    }
+
+    private Payment fail(Payment payment, String reason) {
+        payment.setStatus(PaymentStatus.FAILED);
+        payment.setFailureReason(reason);
+        Payment saved = paymentRepository.saveAndFlush(payment);
+        log.warn("Payment {} {} amount={} -> FAILED ({})",
+                saved.getId(), saved.getType(), saved.getAmount(), reason);
+        return saved;
     }
 }
