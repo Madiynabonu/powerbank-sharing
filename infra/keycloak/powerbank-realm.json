@@ -1,0 +1,51 @@
+{
+  "realm": "powerbank",
+  "displayName": "Powerbank Sharing",
+  "enabled": true,
+  "ssoSessionIdleTimeout": 1800,
+  "accessTokenLifespan": 900,
+  "refreshTokenMaxReuse": 0,
+  "clients": [
+    {
+      "clientId": "powerbank-app",
+      "name": "Powerbank Mobile App",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "powerbank-app-secret",
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": {},
+      "defaultClientScopes": ["profile", "email", "openid"]
+    },
+    {
+      "clientId": "kong-introspection",
+      "name": "Kong Token Introspection Client",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "kong-introspection-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "admin-cli",
+      "name": "Admin CLI",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "admin-cli-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect"
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "user", "description": "Regular user role" }
+    ]
+  },
+  "defaultRoles": ["user"]
+}

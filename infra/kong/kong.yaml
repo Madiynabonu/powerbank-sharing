@@ -1,0 +1,92 @@
+_format_version: "3.0"
+_transform: true
+
+# Kong DB-less declarative configuration.
+# Assembled by decK; Kong runs with KONG_DATABASE=off.
+#
+# Architecture:
+#   - user-service:   HTTP REST (Spring MVC), no transcoding needed
+#   - rental-service: gRPC server on port 9091 (gRPC-gateway transcodes REST→gRPC)
+#   - station-service: gRPC server on port 9092 (gRPC-gateway transcodes REST→gRPC)
+#
+# Auth: OAuth2 Token Introspection against Keycloak on every request to
+# /v1/* and /api/v1/* routes; /auth/* is public.
+
+services:
+  # ─── User Service ───────────────────────────────────────────────
+  - name: user-service
+    url: http://user-service:8080
+    routes:
+      - name: auth-routes
+        paths:
+          - /auth
+        strip_path: false
+        methods: [POST]
+      - name: user-v1-routes
+        paths:
+          - /v1/me
+          - /v1/auth/refresh
+        strip_path: false
+        plugins:
+          - name: oidc
+            config:
+              discovery: http://keycloak:8080/realms/powerbank/.well-known/openid-configuration
+              introspection_endpoint: http://keycloak:8080/realms/powerbank/protocol/openid-connect/token/introspect
+              introspection_endpoint_auth_method: client_secret_post
+              client_id: kong-introspection
+              client_secret: kong-introspection-secret
+              bearer_only: "yes"
+
+  # ─── Station Service (gRPC Transcoding) ─────────────────────────
+  - name: station-service-grpc
+    url: grpc://station-service:9092
+    protocol: grpc
+    routes:
+      - name: station-rest-to-grpc
+        paths:
+          - /v1/stations
+        strip_path: false
+        protocols: [http, https]
+        plugins:
+          - name: grpc-gateway
+            config:
+              proto: /usr/local/kong/protos/station.proto
+          - name: oidc
+            config:
+              discovery: http://keycloak:8080/realms/powerbank/.well-known/openid-configuration
+              introspection_endpoint: http://keycloak:8080/realms/powerbank/protocol/openid-connect/token/introspect
+              introspection_endpoint_auth_method: client_secret_post
+              client_id: kong-introspection
+              client_secret: kong-introspection-secret
+              bearer_only: "yes"
+
+  # ─── Rental Service (gRPC Transcoding) ──────────────────────────
+  - name: rental-service-grpc
+    url: grpc://rental-service:9091
+    protocol: grpc
+    routes:
+      - name: rental-rest-to-grpc
+        paths:
+          - /v1/rental
+        strip_path: false
+        protocols: [http, https]
+        plugins:
+          - name: grpc-gateway
+            config:
+              proto: /usr/local/kong/protos/rental.proto
+          - name: oidc
+            config:
+              discovery: http://keycloak:8080/realms/powerbank/.well-known/openid-configuration
+              introspection_endpoint: http://keycloak:8080/realms/powerbank/protocol/openid-connect/token/introspect
+              introspection_endpoint_auth_method: client_secret_post
+              client_id: kong-introspection
+              client_secret: kong-introspection-secret
+              bearer_only: "yes"
+
+# Global plugins
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true

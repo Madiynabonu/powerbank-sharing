@@ -1,0 +1,292 @@
+version: "3.9"
+
+# ── Volumes ─────────────────────────────────────────────────────────────────
+volumes:
+  pg-user:
+  pg-station:
+  pg-rental:
+  pg-payment:
+  kafka-data:
+
+# ── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  powerbank:
+    driver: bridge
+
+# ── Services ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── Databases ──────────────────────────────────────────────────────────────
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: postgres-user
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: userdb
+      POSTGRES_PASSWORD: userdb
+    volumes:
+      - pg-user:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [powerbank]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U userdb -d userdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-station:
+    image: postgres:16-alpine
+    container_name: postgres-station
+    environment:
+      POSTGRES_DB: station
+      POSTGRES_USER: station
+      POSTGRES_PASSWORD: station
+    volumes:
+      - pg-station:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks: [powerbank]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U station -d station"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-rental:
+    image: postgres:16-alpine
+    container_name: postgres-rental
+    environment:
+      POSTGRES_DB: rental
+      POSTGRES_USER: rental
+      POSTGRES_PASSWORD: rental
+    volumes:
+      - pg-rental:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    networks: [powerbank]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rental -d rental"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-payment:
+    image: postgres:16-alpine
+    container_name: postgres-payment
+    environment:
+      POSTGRES_DB: payment
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+    volumes:
+      - pg-payment:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    networks: [powerbank]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d payment"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Kafka (KRaft — no ZooKeeper) ───────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "29092:29092"
+    networks: [powerbank]
+    healthcheck:
+      test: kafka-topics --bootstrap-server kafka:9092 --list
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  # ── Keycloak ───────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    command:
+      - start-dev
+      - --import-realm
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import
+    ports:
+      - "8180:8080"
+    networks: [powerbank]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/realms/powerbank/.well-known/openid-configuration || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # ── Kong Gateway (DB-less) ─────────────────────────────────────────────────
+  kong:
+    image: kong:3.7-ubuntu
+    container_name: kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yaml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_PLUGINS: bundled,grpc-gateway,oidc
+    volumes:
+      - ./infra/kong/kong.yaml:/usr/local/kong/declarative/kong.yaml:ro
+      # proto files are needed by grpc-gateway plugin for transcoding
+      - ./station-service/src/main/proto/station.proto:/usr/local/kong/protos/station.proto:ro
+      - ./rental-service/src/main/proto/rental.proto:/usr/local/kong/protos/rental.proto:ro
+      - ./station-service/src/main/proto/google:/usr/local/kong/protos/google:ro
+    ports:
+      - "8000:8000"   # Kong proxy (public API)
+      - "8001:8001"   # Kong Admin API
+    networks: [powerbank]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # ── Application Services ───────────────────────────────────────────────────
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: jdbc:postgresql://postgres-user:5432/userdb
+      DB_USERNAME: userdb
+      DB_PASSWORD: userdb
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/powerbank
+      KEYCLOAK_REALM: powerbank
+      KEYCLOAK_ADMIN_CLIENT_ID: admin-cli
+      KEYCLOAK_ADMIN_CLIENT_SECRET: admin-cli-secret
+      KEYCLOAK_USER_CLIENT_ID: powerbank-app
+      KEYCLOAK_USER_CLIENT_SECRET: powerbank-app-secret
+    ports:
+      - "8080:8080"
+    networks: [powerbank]
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  station-service:
+    build:
+      context: ./station-service
+      dockerfile: Dockerfile
+    container_name: station-service
+    environment:
+      SERVER_PORT: 8082
+      GRPC_PORT: 9092
+      DB_URL: jdbc:postgresql://postgres-station:5432/station
+      DB_USERNAME: station
+      DB_PASSWORD: station
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8082"
+      - "9092:9092"
+    networks: [powerbank]
+    depends_on:
+      postgres-station:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  rental-service:
+    build:
+      context: ./rental-service
+      dockerfile: Dockerfile
+    container_name: rental-service
+    environment:
+      SERVER_PORT: 8081
+      GRPC_PORT: 9091
+      DB_URL: jdbc:postgresql://postgres-rental:5432/rental
+      DB_USERNAME: rental
+      DB_PASSWORD: rental
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8081:8081"
+      - "9091:9091"
+    networks: [powerbank]
+    depends_on:
+      postgres-rental:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    environment:
+      SERVER_PORT: 8083
+      DB_URL: jdbc:postgresql://postgres-payment:5432/payment
+      DB_USERNAME: payment
+      DB_PASSWORD: payment
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8083:8083"
+    networks: [powerbank]
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
