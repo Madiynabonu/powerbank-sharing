@@ -1,0 +1,79 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-rentals
+      author: madina
+      changes:
+        - createTable:
+            tableName: rentals
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: station_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: return_station_id
+                  type: uuid
+              - column:
+                  name: card_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: powerbank_id
+                  type: uuid
+              - column:
+                  name: slot_number
+                  type: integer
+              - column:
+                  name: status
+                  type: varchar(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: failure_reason
+                  type: varchar(255)
+              - column:
+                  name: started_at
+                  type: timestamptz
+              - column:
+                  name: finished_at
+                  type: timestamptz
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: rentals
+            indexName: idx_rentals_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: rentals
+            indexName: idx_rentals_status
+            columns:
+              - column: { name: status }
+        - createIndex:
+            tableName: rentals
+            indexName: idx_rentals_powerbank_id
+            columns:
+              - column: { name: powerbank_id }

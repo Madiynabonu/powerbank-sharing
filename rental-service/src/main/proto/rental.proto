@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package powerbank.rental;
+
+import "google/api/annotations.proto";
+
+option java_multiple_files = true;
+option java_package = "com.powerbank.rental.grpc";
+option java_outer_classname = "RentalProto";
+
+service RentalApi {
+  // POST /v1/rental
+  rpc CreateRental(CreateRentalRequest) returns (CreateRentalResponse) {
+    option (google.api.http) = {
+      post: "/v1/rental"
+      body: "*"
+    };
+  }
+
+  // GET /v1/rental/{id}/status
+  rpc GetRentalStatus(GetRentalStatusRequest) returns (RentalStatusResponse) {
+    option (google.api.http) = {
+      get: "/v1/rental/{id}/status"
+    };
+  }
+
+  // GET /v1/rental/history
+  rpc GetRentalHistory(GetRentalHistoryRequest) returns (GetRentalHistoryResponse) {
+    option (google.api.http) = {
+      get: "/v1/rental/history"
+    };
+  }
+
+  // POST /v1/rental/finish
+  rpc FinishRental(FinishRentalRequest) returns (RentalStatusResponse) {
+    option (google.api.http) = {
+      post: "/v1/rental/finish"
+      body: "*"
+    };
+  }
+}
+
+message CreateRentalRequest {
+  string station_id = 1;
+  string card_id    = 2;
+  string user_id    = 3;  // populated by Kong from the JWT sub claim
+}
+
+message CreateRentalResponse {
+  string rental_id = 1;
+  string status    = 2;
+}
+
+message GetRentalStatusRequest {
+  string id = 1;
+}
+
+message RentalStatusResponse {
+  string rental_id    = 1;
+  string status       = 2;   // WAITING | STATION_LOCK | PROCESSING_PAYMENT | IN_THE_LEASE | FINISHED | FAILED
+  string powerbank_id = 3;
+  int32  slot         = 4;
+  string failure_reason = 5;
+}
+
+message GetRentalHistoryRequest {
+  string user_id   = 1;  // populated by Kong from JWT
+  int32  page      = 2;
+  int32  page_size = 3;
+}
+
+message GetRentalHistoryResponse {
+  repeated RentalSummary rentals = 1;
+  int32 total = 2;
+}
+
+message RentalSummary {
+  string rental_id    = 1;
+  string station_id   = 2;
+  string powerbank_id = 3;
+  string status       = 4;
+  string started_at   = 5;
+  string finished_at  = 6;
+}
+
+message FinishRentalRequest {
+  string rental_id   = 1;
+  string station_id  = 2;  // return station (may differ from origin)
+  string user_id     = 3;  // from JWT
+}
