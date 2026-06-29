@@ -24,7 +24,7 @@ Client
   └── Kong Gateway (port 8000)
         ├── /auth/**          → user-service:8080   (HTTP REST)
         ├── /v1/me            → user-service:8080   (JWT introspection)
-        ├── /v1/stations/**   → station-service:9092 (gRPC transcoding)
+        ├── /v1/stations/**   → rental-service:9091  (gRPC transcoding → proxies to station-service internally)
         └── /v1/rental/**     → rental-service:9091  (gRPC transcoding)
 
 Kafka topics:
