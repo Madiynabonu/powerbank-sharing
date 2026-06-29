@@ -46,6 +46,7 @@ app:
       acquire-cabinet-lock-result: acquire-cabinet-lock-result
       eject-powerbank: eject-powerbank-event
       eject-powerbank-result: eject-powerbank-result
+      return-powerbank-command: return-powerbank-command
   station:
     lock-sim-delay-ms: 500   # simulated async delay for cabinet lock
     eject-sim-delay-ms: 800  # simulated async delay for powerbank ejection

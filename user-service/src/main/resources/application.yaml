@@ -32,7 +32,19 @@ keycloak:
   user-client-id: ${KEYCLOAK_USER_CLIENT_ID:powerbank-app}
   user-client-secret: ${KEYCLOAK_USER_CLIENT_SECRET:powerbank-app-secret}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 10
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
 app:
+  kafka:
+    topics:
+      card-command: card-command
   otp:
     length: 6
     ttl-minutes: 5

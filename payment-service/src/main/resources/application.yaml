@@ -42,6 +42,7 @@ app:
       payment-result: payment-result
       payment-events: payment-events
       card-command: card-command
+      cancel-payment-command: cancel-payment-command
 
 management:
   endpoints:

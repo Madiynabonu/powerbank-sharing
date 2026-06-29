@@ -32,10 +32,12 @@ Kafka topics:
   acquire-cabinet-lock-result  station→rental
   eject-powerbank-event        rental→station
   eject-powerbank-result       station→rental
+  return-powerbank-command     rental→station  (dock powerbank on finish)
   payment-request              rental→payment
   payment-result               payment→rental
+  cancel-payment-command       rental→payment  (refund on eject failure)
   payment-events               payment→(audit)
-  card-command                 *→payment (bind card)
+  card-command                 user→payment    (bind card via POST /v1/cards)
 ```
 
 ## Quickstart
@@ -66,6 +68,18 @@ export TOKEN=<access_token>
 # 6. Get nearby stations
 curl "http://localhost:8000/v1/stations?lat=41.299&lng=69.240&radius_m=5000" \
   -H "Authorization: Bearer $TOKEN"
+
+# 6b. Bind a card (authenticated; cardId will be used in step 7)
+curl -X POST http://localhost:8000/v1/cards \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "cardId": "11111111-1111-1111-1111-111111111111",
+    "maskedPan": "4111111111111111",
+    "initialBalance": 500000,
+    "currency": "UZS"
+  }'
+# Returns HTTP 202 ACCEPTED. Card is bound asynchronously in payment-service.
 
 # 7. Create a rental (use stationId from step 6, cardId from demo seed)
 curl -X POST http://localhost:8000/v1/rental \

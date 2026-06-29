@@ -107,4 +107,16 @@ public class KafkaConfig {
             @Value("${app.kafka.topics.payment-result}") String name) {
         return TopicBuilder.name(name).partitions(3).replicas(1).build();
     }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic cancelPaymentCommandTopic(
+            @Value("${app.kafka.topics.cancel-payment-command}") String name) {
+        return TopicBuilder.name(name).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic returnPowerbankTopic(
+            @Value("${app.kafka.topics.return-powerbank-command}") String name) {
+        return TopicBuilder.name(name).partitions(3).replicas(1).build();
+    }
 }

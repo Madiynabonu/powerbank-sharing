@@ -4,10 +4,12 @@ import com.powerbank.rentalservice.domain.Rental;
 import com.powerbank.rentalservice.domain.RentalStatus;
 import com.powerbank.rentalservice.messaging.event.AcquireLockCommand;
 import com.powerbank.rentalservice.messaging.event.AcquireLockResult;
+import com.powerbank.rentalservice.messaging.event.CancelPaymentCommand;
 import com.powerbank.rentalservice.messaging.event.EjectCommand;
 import com.powerbank.rentalservice.messaging.event.EjectResult;
 import com.powerbank.rentalservice.messaging.event.PaymentRequest;
 import com.powerbank.rentalservice.messaging.event.PaymentResult;
+import com.powerbank.rentalservice.messaging.event.ReturnPowerbankCommand;
 import com.powerbank.rentalservice.repository.RentalRepository;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -56,6 +58,12 @@ public class RentalService {
 
     @Value("${app.kafka.topics.payment-request}")
     private String paymentRequestTopic;
+
+    @Value("${app.kafka.topics.cancel-payment-command}")
+    private String cancelPaymentTopic;
+
+    @Value("${app.kafka.topics.return-powerbank-command}")
+    private String returnPowerbankTopic;
 
     @Value("${app.rental.recurrent-charge-amount}")
     private BigDecimal recurrentChargeAmount;
@@ -151,6 +159,10 @@ public class RentalService {
             rental.fail(result.errorReason());
             rentalRepository.save(rental);
             log.warn("Rental {} FAILED at eject: {}", rental.getId(), result.errorReason());
+            // Payment already SUCCEEDED at this point — issue a cancellation refund
+            CancelPaymentCommand cancel = new CancelPaymentCommand(
+                    "rental-start-" + rental.getId(), rental.getId());
+            kafkaTemplate.send(cancelPaymentTopic, rental.getId().toString(), cancel);
             return;
         }
 
@@ -175,7 +187,14 @@ public class RentalService {
         rental.transitionTo(RentalStatus.FINISHED);
         rental.setFinishedAt(OffsetDateTime.now());
         rentalRepository.save(rental);
-        log.info("Rental {} FINISHED, returned to station {}", rentalId, returnStationId);
+
+        // Notify station-service to dock the powerbank back into the return station
+        ReturnPowerbankCommand returnCmd = new ReturnPowerbankCommand(
+                rental.getId(), rental.getPowerbankId(), returnStationId);
+        kafkaTemplate.send(returnPowerbankTopic, rental.getId().toString(), returnCmd);
+
+        log.info("Rental {} FINISHED, powerbank {} returning to station {}",
+                rentalId, rental.getPowerbankId(), returnStationId);
         return rental;
     }
 

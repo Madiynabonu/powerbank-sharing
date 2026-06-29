@@ -2,6 +2,7 @@ package com.powerbank.stationservice.config;
 
 import com.powerbank.stationservice.messaging.event.AcquireLockCommand;
 import com.powerbank.stationservice.messaging.event.EjectCommand;
+import com.powerbank.stationservice.messaging.event.ReturnPowerbankCommand;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -42,6 +43,9 @@ public class KafkaConfig {
 
     @Value("${app.kafka.topics.eject-powerbank-result}")
     private String ejectResultTopic;
+
+    @Value("${app.kafka.topics.return-powerbank-command}")
+    private String returnPowerbankTopic;
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
@@ -102,6 +106,12 @@ public class KafkaConfig {
     }
 
     @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, ReturnPowerbankCommand> returnPowerbankListenerFactory(
+            KafkaTemplate<String, Object> template) {
+        return listenerFactory(ReturnPowerbankCommand.class, template);
+    }
+
+    @Bean
     public org.apache.kafka.clients.admin.NewTopic acquireLockTopic() {
         return TopicBuilder.name(acquireLockTopic).partitions(3).replicas(1).build();
     }
@@ -119,5 +129,10 @@ public class KafkaConfig {
     @Bean
     public org.apache.kafka.clients.admin.NewTopic ejectResultTopic() {
         return TopicBuilder.name(ejectResultTopic).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic returnPowerbankTopic() {
+        return TopicBuilder.name(returnPowerbankTopic).partitions(3).replicas(1).build();
     }
 }

@@ -4,6 +4,7 @@ import com.powerbank.stationservice.messaging.event.AcquireLockCommand;
 import com.powerbank.stationservice.messaging.event.AcquireLockResult;
 import com.powerbank.stationservice.messaging.event.EjectCommand;
 import com.powerbank.stationservice.messaging.event.EjectResult;
+import com.powerbank.stationservice.messaging.event.ReturnPowerbankCommand;
 import com.powerbank.stationservice.service.StationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,5 +49,14 @@ public class StationCommandConsumer {
         log.info("Station received eject command powerbank={} rental={}", cmd.powerbankId(), cmd.rentalId());
         EjectResult result = stationService.simulateEject(cmd);
         kafkaTemplate.send(ejectResultTopic, cmd.rentalId().toString(), result);
+    }
+
+    @KafkaListener(
+            topics = "${app.kafka.topics.return-powerbank-command}",
+            containerFactory = "returnPowerbankListenerFactory")
+    public void onReturnPowerbank(ReturnPowerbankCommand cmd) {
+        log.info("Station received return-powerbank command powerbank={} station={} rental={}",
+                cmd.powerbankId(), cmd.returnStationId(), cmd.rentalId());
+        stationService.returnPowerBank(cmd.powerbankId(), cmd.returnStationId());
     }
 }

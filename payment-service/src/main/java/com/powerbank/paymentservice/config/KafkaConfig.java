@@ -1,5 +1,6 @@
 package com.powerbank.paymentservice.config;
 
+import com.powerbank.paymentservice.messaging.event.CancelPaymentCommand;
 import com.powerbank.paymentservice.messaging.event.CardCommand;
 import com.powerbank.paymentservice.messaging.event.PaymentRequest;
 import java.util.HashMap;
@@ -47,6 +48,9 @@ public class KafkaConfig {
 
     @Value("${app.kafka.topics.card-command}")
     private String cardCommandTopic;
+
+    @Value("${app.kafka.topics.cancel-payment-command}")
+    private String cancelPaymentCommandTopic;
 
     // ---------------------------------------------------------------- producer
 
@@ -113,6 +117,12 @@ public class KafkaConfig {
         return listenerFactory(CardCommand.class, template);
     }
 
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, CancelPaymentCommand> cancelPaymentListenerFactory(
+            KafkaTemplate<String, Object> template) {
+        return listenerFactory(CancelPaymentCommand.class, template);
+    }
+
     // ------------------------------------------------------------------ topics
 
     @Bean
@@ -133,5 +143,10 @@ public class KafkaConfig {
     @Bean
     public org.apache.kafka.clients.admin.NewTopic cardCommandTopic() {
         return TopicBuilder.name(cardCommandTopic).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic cancelPaymentCommandTopic() {
+        return TopicBuilder.name(cancelPaymentCommandTopic).partitions(3).replicas(1).build();
     }
 }

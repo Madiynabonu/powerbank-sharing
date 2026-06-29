@@ -55,6 +55,8 @@ app:
       eject-powerbank-result: eject-powerbank-result
       payment-request: payment-request
       payment-result: payment-result
+      cancel-payment-command: cancel-payment-command
+      return-powerbank-command: return-powerbank-command
   rental:
     recurrent-charge-amount: 1000  # UZS per interval
     recurrent-interval-minutes: 30

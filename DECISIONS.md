@@ -51,6 +51,8 @@ Remaining gap: if the DB write commits but the Kafka publish fails completely, t
 | `payment-result` | `rentalId` | Arrives after request on same partition |
 | `payment-events` | `cardId` | Audit stream: all events for one card in order |
 | `card-command` | `cardId` | All commands for one card serialized |
+| `cancel-payment-command` | `rentalId` | Cancel after eject failure; ordered with payment-request |
+| `return-powerbank-command` | `rentalId` | Return to station after finish; ordered per rental |
 
 Ordering matters because rental-service processes FSM transitions from multiple topics; if the lock result arrived after the eject command we would try to eject before locking.
 
@@ -84,8 +86,7 @@ We return the **original** payment unchanged and log a warning. The idempotency 
 3. **Kong OIDC plugin** — replace the stub `oidc` config with a fully tested `lua-resty-openidc` setup and verify introspection end-to-end.
 4. **gRPC transcoding** — test the Kong `grpc-gateway` plugin with the actual `.proto` files uploaded; verify field mapping for list queries.
 5. **Integration tests** — use `@SpringBootTest` + Testcontainers for real Postgres/Kafka round-trip tests.
-6. **Return flow with Station** — publish a return event to station-service so it can lock the returning slot and update the powerbank status.
-7. **Retry / compensation** — if the lock succeeds but payment fails, release the lock (currently the powerbank stays in EJECTING state forever).
+6. **Retry / compensation** — if the lock succeeds but payment fails, release the lock (currently the powerbank stays in EJECTING state forever).
 8. **Metrics** — expose Micrometer metrics (rental duration, payment failure rate) and wire to Prometheus/Grafana.
 9. **Rate limiting** — add Kong rate-limit plugin to `/auth/phone` to prevent OTP spam.
 10. **UUID v7** — replace random v4 with time-ordered v7 to improve B-tree index locality at scale.

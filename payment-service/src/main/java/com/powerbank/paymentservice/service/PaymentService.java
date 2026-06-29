@@ -121,6 +121,56 @@ public class PaymentService {
         return saved;
     }
 
+    /**
+     * Cancel a previously SUCCEEDED payment identified by its idempotency key.
+     * Refunds the card balance in the same pessimistic-lock transaction.
+     * No-op if already CANCELLED or not found.
+     */
+    @Transactional
+    public void cancel(String originalIdempotencyKey) {
+        Optional<Payment> opt = paymentRepository.findByIdempotencyKey(originalIdempotencyKey);
+        if (opt.isEmpty()) {
+            log.warn("cancel: no payment found for key={}", originalIdempotencyKey);
+            return;
+        }
+        Payment original = opt.get();
+        if (original.getStatus() == PaymentStatus.FAILED
+                || original.getType() == PaymentType.CANCEL) {
+            log.info("cancel: payment {} already terminal, skipping", original.getId());
+            return;
+        }
+        if (original.getStatus() != PaymentStatus.SUCCEEDED) {
+            log.warn("cancel: payment {} is {}, nothing to reverse", original.getId(), original.getStatus());
+            return;
+        }
+
+        Card card = cardRepository.findByIdForUpdate(original.getCardId()).orElse(null);
+        if (card == null) {
+            log.error("cancel: card {} not found for payment {}", original.getCardId(), original.getId());
+            return;
+        }
+        card.setBalance(card.getBalance().add(original.getAmount()));
+        cardRepository.save(card);
+
+        original.setStatus(PaymentStatus.FAILED);
+        original.setFailureReason("CANCELLED");
+        paymentRepository.save(original);
+
+        Payment reversal = new Payment();
+        reversal.setId(UUID.randomUUID());
+        reversal.setIdempotencyKey("cancel-" + originalIdempotencyKey);
+        reversal.setCardId(original.getCardId());
+        reversal.setRentalId(original.getRentalId());
+        reversal.setUserId(original.getUserId());
+        reversal.setAmount(original.getAmount());
+        reversal.setCurrency(original.getCurrency());
+        reversal.setType(PaymentType.CANCEL);
+        reversal.setStatus(PaymentStatus.SUCCEEDED);
+        paymentRepository.saveAndFlush(reversal);
+        log.info("Cancelled payment {} -> reversal {} card balance now {}",
+                original.getId(), reversal.getId(), card.getBalance());
+    }
+
     /** Bind / register an emulated card (modelled here without a real acquirer). */
     @Transactional
     public Card bindCard(UUID cardId, UUID userId, String maskedPan, BigDecimal initialBalance, String currency) {
