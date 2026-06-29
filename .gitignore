@@ -16,3 +16,9 @@ Thumbs.db
 ### Misc ###
 HELP.md
 *.log
+
+### Env overrides ###
+.env
+
+### Task assignment (not part of the deliverable) ###
+java_test_assignment.pdf
