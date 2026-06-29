@@ -1,3 +1,56 @@
+server:
+  port: ${SERVER_PORT:8080}
+
 spring:
   application:
     name: user-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/userdb}
+    username: ${DB_USERNAME:userdb}
+    password: ${DB_PASSWORD:userdb}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/powerbank}
+
+keycloak:
+  server-url: ${KEYCLOAK_URL:http://localhost:8180}
+  realm: ${KEYCLOAK_REALM:powerbank}
+  admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:admin-cli-secret}
+  user-client-id: ${KEYCLOAK_USER_CLIENT_ID:powerbank-app}
+  user-client-secret: ${KEYCLOAK_USER_CLIENT_SECRET:powerbank-app-secret}
+
+app:
+  otp:
+    length: 6
+    ttl-minutes: 5
+    # In production this would send via real Telegram bot; here it logs the code.
+    # Set TELEGRAM_BOT_TOKEN to enable real delivery.
+    telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
+    telegram-enabled: ${TELEGRAM_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.powerbank: DEBUG
