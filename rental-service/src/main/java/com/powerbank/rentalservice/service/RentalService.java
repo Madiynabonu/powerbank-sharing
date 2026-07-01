@@ -2,6 +2,8 @@ package com.powerbank.rentalservice.service;
 
 import com.powerbank.rentalservice.domain.Rental;
 import com.powerbank.rentalservice.domain.RentalStatus;
+import com.powerbank.rentalservice.exception.InvalidRentalStateException;
+import com.powerbank.rentalservice.exception.RentalNotFoundException;
 import com.powerbank.rentalservice.messaging.event.AcquireLockCommand;
 import com.powerbank.rentalservice.messaging.event.AcquireLockResult;
 import com.powerbank.rentalservice.messaging.event.CancelPaymentCommand;
@@ -164,10 +166,10 @@ public class RentalService {
     @Transactional
     public Rental finish(UUID rentalId, UUID returnStationId) {
         Rental rental = rentalRepository.findById(rentalId)
-                .orElseThrow(() -> new IllegalArgumentException("Rental not found: " + rentalId));
+                .orElseThrow(() -> new RentalNotFoundException(rentalId));
 
         if (rental.getStatus() != RentalStatus.IN_THE_LEASE) {
-            throw new IllegalStateException("Cannot finish rental in state " + rental.getStatus());
+            throw new InvalidRentalStateException(rental.getStatus());
         }
 
         rental.setReturnStationId(returnStationId);

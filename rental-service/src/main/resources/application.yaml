@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: rental-service
+  messages:
+    basename: messages
+    encoding: UTF-8
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rental}
     username: ${DB_USERNAME:rental}

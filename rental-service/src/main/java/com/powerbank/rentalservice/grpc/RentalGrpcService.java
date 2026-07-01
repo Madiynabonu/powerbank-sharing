@@ -14,16 +14,20 @@ import com.powerbank.rental.grpc.RentalStatusResponse;
 import com.powerbank.rental.grpc.RentalSummary;
 import com.powerbank.rental.grpc.StationDto;
 import com.powerbank.rentalservice.domain.Rental;
+import com.powerbank.rentalservice.exception.InvalidRentalStateException;
+import com.powerbank.rentalservice.exception.RentalNotFoundException;
 import com.powerbank.rentalservice.service.RentalService;
 import com.powerbank.station.grpc.StationApiGrpc;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import net.devh.boot.grpc.server.service.GrpcService;
+import org.springframework.context.MessageSource;
 import org.springframework.data.domain.Page;
 
 @GrpcService
@@ -32,9 +36,19 @@ import org.springframework.data.domain.Page;
 public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
 
     private final RentalService rentalService;
+    private final MessageSource messageSource;
 
     @GrpcClient("station-service")
     private StationApiGrpc.StationApiBlockingStub stationStub;
+
+    private Locale locale() {
+        Locale l = LocaleGrpcInterceptor.LOCALE_KEY.get();
+        return l != null ? l : Locale.ENGLISH;
+    }
+
+    private String msg(String key, Object... args) {
+        return messageSource.getMessage(key, args, locale());
+    }
 
     @Override
     public void createRental(CreateRentalRequest request,
@@ -51,7 +65,7 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             responseObserver.onCompleted();
         } catch (Exception e) {
             log.error("createRental failed", e);
-            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+            responseObserver.onError(Status.INTERNAL.withDescription(msg("error.internal")).asRuntimeException());
         }
     }
 
@@ -64,11 +78,11 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
                     .ifPresentOrElse(
                             proto -> { responseObserver.onNext(proto); responseObserver.onCompleted(); },
                             () -> responseObserver.onError(
-                                    Status.NOT_FOUND.withDescription("Rental not found: " + request.getId())
+                                    Status.NOT_FOUND.withDescription(msg("rental.not_found", request.getId()))
                                             .asRuntimeException()));
         } catch (IllegalArgumentException e) {
             responseObserver.onError(
-                    Status.INVALID_ARGUMENT.withDescription("Invalid rental ID: " + request.getId())
+                    Status.INVALID_ARGUMENT.withDescription(msg("rental.invalid_id", request.getId()))
                             .asRuntimeException());
         }
     }
@@ -81,7 +95,7 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             userId = UUID.fromString(request.getUserId());
         } catch (IllegalArgumentException e) {
             responseObserver.onError(
-                    Status.INVALID_ARGUMENT.withDescription("Invalid user ID: " + request.getUserId())
+                    Status.INVALID_ARGUMENT.withDescription(msg("user.invalid_id", request.getUserId()))
                             .asRuntimeException());
             return;
         }
@@ -94,7 +108,7 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             responseObserver.onCompleted();
         } catch (Exception e) {
             log.error("getRentalHistory failed", e);
-            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+            responseObserver.onError(Status.INTERNAL.withDescription(msg("error.internal")).asRuntimeException());
         }
     }
 
@@ -107,20 +121,23 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             returnStationId = UUID.fromString(request.getStationId());
         } catch (IllegalArgumentException e) {
             responseObserver.onError(
-                    Status.INVALID_ARGUMENT.withDescription(e.getMessage()).asRuntimeException());
+                    Status.INVALID_ARGUMENT.withDescription(msg("rental.invalid_id", request.getRentalId()))
+                            .asRuntimeException());
             return;
         }
         try {
             Rental rental = rentalService.finish(rentalId, returnStationId);
             responseObserver.onNext(toStatusProto(rental));
             responseObserver.onCompleted();
-        } catch (IllegalArgumentException e) {
-            responseObserver.onError(Status.NOT_FOUND.withDescription(e.getMessage()).asRuntimeException());
-        } catch (IllegalStateException e) {
-            responseObserver.onError(Status.FAILED_PRECONDITION.withDescription(e.getMessage()).asRuntimeException());
+        } catch (RentalNotFoundException e) {
+            responseObserver.onError(Status.NOT_FOUND
+                    .withDescription(msg("rental.not_found", e.getRentalId())).asRuntimeException());
+        } catch (InvalidRentalStateException e) {
+            responseObserver.onError(Status.FAILED_PRECONDITION
+                    .withDescription(msg("rental.invalid_state", e.getStatus())).asRuntimeException());
         } catch (Exception e) {
             log.error("finishRental failed", e);
-            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+            responseObserver.onError(Status.INTERNAL.withDescription(msg("error.internal")).asRuntimeException());
         }
     }
 
@@ -142,7 +159,7 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             responseObserver.onCompleted();
         } catch (Exception e) {
             log.error("getStations failed", e);
-            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+            responseObserver.onError(Status.INTERNAL.withDescription(msg("error.internal")).asRuntimeException());
         }
     }
 
@@ -161,7 +178,7 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
             responseObserver.onError(e);
         } catch (Exception e) {
             log.error("getStation failed", e);
-            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+            responseObserver.onError(Status.INTERNAL.withDescription(msg("error.internal")).asRuntimeException());
         }
     }
 
@@ -185,7 +202,11 @@ public class RentalGrpcService extends RentalApiGrpc.RentalApiImplBase {
                 .setStatus(r.getStatus().name());
         if (r.getPowerbankId() != null) b.setPowerbankId(r.getPowerbankId().toString());
         if (r.getSlotNumber() != null) b.setSlot(r.getSlotNumber());
-        if (r.getFailureReason() != null) b.setFailureReason(r.getFailureReason());
+        if (r.getFailureReason() != null) {
+            String key = "payment.failure." + r.getFailureReason();
+            String translated = messageSource.getMessage(key, null, r.getFailureReason(), locale());
+            b.setFailureReason(translated);
+        }
         return b.build();
     }
 

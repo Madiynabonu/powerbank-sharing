@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: user-service
+  messages:
+    basename: messages
+    encoding: UTF-8
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/userdb}
     username: ${DB_USERNAME:userdb}
